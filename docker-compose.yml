@@ -1,19 +1,17 @@
+# docker-compose.yml (수정된 부분)
 version: '3.8'
 
 services:
   web:
-    # Nginx 대신 PHP가 포함된 Apache 이미지 사용
-    image: php:8.0-apache
+    # image: php:8.0-apache # 이 줄은 주석 처리하거나 제거합니다.
+    build: . # 현재 디렉토리의 Dockerfile을 사용하여 이미지를 빌드합니다.
     container_name: blog_web_server
-    # 현재 디렉토리의 www 폴더를 웹 서버 루트(/var/www/html)에 마운트
     volumes:
       - ./www:/var/www/html
     ports:
-      # Host:VM 포트는 그대로 8080:80 유지 (VMware 포트 포워딩을 위해)
       - "8080:80"
     networks:
       - blog-net
-    # DB 컨테이너가 먼저 실행되도록 보장
     depends_on:
       - db
     restart: always
@@ -22,8 +20,7 @@ services:
     image: mysql:8.0
     container_name: blog_db_server
     environment:
-      # DB 환경 변수는 그대로 유지
-      MYSQL_ROOT_PASSWORD: your_strong_password! 
+      MYSQL_ROOT_PASSWORD: your_strong_password! # <<-- **반드시 강력한 비밀번호로 변경하세요!**
       MYSQL_DATABASE: blog_data
     volumes:
       - db_data:/var/lib/mysql
@@ -37,4 +34,3 @@ networks:
 
 volumes:
   db_data:
-
