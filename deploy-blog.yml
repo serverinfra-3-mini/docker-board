@@ -1,0 +1,52 @@
+# deploy-blog.yml
+---
+- name: 1. Deploy web application content to worker node
+  hosts: worker  # worker 그룹의 노드 (192.168.0.177) 대상
+  become: yes    # root 권한으로 실행
+  roles:
+    - my_blog_role # index.php 파일을 /opt/my-blog/www/index.php로 복사
+
+- name: 2. Deploy Docker Swarm Stack on Manager Node
+  hosts: manager # manager 그룹의 노드 (192.168.0.178) 대상
+  become: yes    # Docker 명령 실행을 위해 root 권한이 필요할 수 있습니다.
+  gather_facts: no # 이 플레이는 팩트 수집이 필요 없을 수 있습니다.
+
+  vars:
+    # Ansible 컨트롤 노드(master)에 있는 blog-stack.yml 파일의 경로입니다.
+    # {{ playbook_dir }}은 현재 플레이북이 위치한 디렉토리의 절대 경로입니다.
+    local_blog_stack_file: "{{ playbook_dir }}/docker-board/blog-stack.yml"
+    # manager 노드에 파일을 복사할 임시 경로입니다.
+    remote_blog_stack_path: "/tmp/blog-stack.yml"
+    # 배포될 스택의 이름입니다.
+    blog_stack_name: "blog" # 이전 my-blog-stack 대신 'blog'를 사용했습니다.
+
+  tasks:
+    - name: Check if blog-stack.yml exists on controller
+      ansible.builtin.stat:
+        path: "{{ local_blog_stack_file }}"
+      register: blog_stack_file_status
+      delegate_to: localhost # 컨트롤러 노드(로컬)에서 파일 존재 여부 확인
+
+    - name: Fail if blog-stack.yml does not exist
+      ansible.builtin.fail:
+        msg: "blog-stack.yml file not found at {{ local_blog_stack_file }}. Please ensure it exists."
+      when: not blog_stack_file_status.stat.exists
+      delegate_to: localhost # 컨트롤러 노드에서 오류 메시지 출력
+
+    - name: Copy blog-stack.yml to the manager node
+      ansible.builtin.copy:
+        src: "{{ local_blog_stack_file }}"
+        dest: "{{ remote_blog_stack_path }}"
+        mode: '0644'
+        owner: root
+        group: root
+
+    - name: Deploy Docker Swarm stack on the manager node
+      ansible.builtin.command: >
+        docker stack deploy -c {{ remote_blog_stack_path }} {{ blog_stack_name }}
+      register: blog_deploy_result
+      changed_when: blog_deploy_result.rc == 0 # 명령 실행 성공 시 changed 상태로 간주
+
+    - name: Display Docker stack deployment result
+      ansible.builtin.debug:
+        var: blog_deploy_result.stdout_lines
